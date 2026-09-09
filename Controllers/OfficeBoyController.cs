@@ -29,24 +29,27 @@ namespace OBManagementAPI.Controllers
             string sql = @"
                 SELECT 
                     t.Id AS taskId,
-                    t.Description,
+                    t.Description AS description,
                     l.Name AS location,
                     l.Latitude AS latitude,
                     l.Longitude AS longitude,
                     f.Name AS assignedBy,
-                    t.Status,
-                    t.TaskTime,
-                    t.Rating,
-                    t.Remarks,
-                    t.CurrentLocationId,
+                    t.Status AS status,
+                    t.TaskTime AS taskTime,
+                    t.Rating AS rating,
+                    t.Remarks AS remarks,
+                    t.CurrentLocationId AS currentLocationId,
                     cl.Name AS currentLocationName,
                     cl.Latitude AS currentLatitude,
-                    cl.Longitude AS currentLongitude
+                    cl.Longitude AS currentLongitude,
+                    t.ScheduledAt AS scheduledAt,
+                    t.IsScheduled AS isScheduled
                 FROM Task t
-                JOIN Location l ON t.LocationId = l.Id
-                JOIN Account f ON t.FacultyAccountId = f.Id
+                LEFT JOIN Location l ON t.LocationId = l.Id
+                LEFT JOIN Account f ON t.FacultyAccountId = f.Id
                 LEFT JOIN Location cl ON t.CurrentLocationId = cl.Id
-                WHERE t.OfficeBoyAccountId = @OfficeBoyId";
+                WHERE t.OfficeBoyAccountId = @OfficeBoyId
+                ORDER BY t.Id DESC";
 
             var tasks = await _db.QueryAsync<dynamic>(sql, new { OfficeBoyId = id });
 
