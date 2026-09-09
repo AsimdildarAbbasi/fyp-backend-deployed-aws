@@ -1,169 +1,82 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
+using System.Data;
+using Dapper;
 using OBManagementAPI.Models;
 
 namespace OBManagementAPI.Controllers
 {
-    // ---------------------------------------------------------------------------
-    // SupervisorController
-    // Handles all Supervisor related APIs.
-    //
-    // APIs:
-    //   1. GET api/supervisor/dashboard  → counts + full list of everything
-    //   2. GET api/supervisor/floors     → all floors with offices
-    //   3. GET api/supervisor/officeboys → all officeboys
-    //   4. GET api/supervisor/faculty    → all faculty with office info
-    // ---------------------------------------------------------------------------
-
     [Route("api/[controller]")]
     [ApiController]
     public class SupervisorController : ControllerBase
     {
-        // Database connection injected automatically by .NET
-        private readonly ObmanagementContext _context;
+        private readonly IDbConnection _db;
 
-        public SupervisorController(ObmanagementContext context)
+        public SupervisorController(IDbConnection db)
         {
-            _context = context;
+            _db = db;
         }
 
-        // -----------------------------------------------------------------------
         // GET api/supervisor/dashboard
-        //
-        // PURPOSE:
-        //   Returns total counts AND full data for floors, offices,
-        //   officeboys and faculty all in one response.
-        //   Supervisor sees counts on cards and full lists below.
-        //
-        // RESPONSE (200):
-        //   {
-        //     "totalFloors":     4,
-        //     "totalOffices":    8,
-        //     "totalOfficeBoys": 4,
-        //     "totalFaculty":    4,
-        //     "floors":     [ { "floorId": 1, "floorNumber": 1, "offices": [...] } ],
-        //     "officeboys": [ { "id": 1, "name": "Ali Raza" } ],
-        //     "faculty":    [ { "id": 5, "name": "Dr. Ayesha", "office": "CS Dept", "floor": 1 } ]
-        //   }
-        // -----------------------------------------------------------------------
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
-            // Count total floors
-            var totalFloors = await _context.BuildingFloors.CountAsync();
+            var totalFloors = await _db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM BuildingFloor");
+            var totalOffices = await _db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Office");
+            var totalOfficeBoys = await _db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Account WHERE Role = 1");
+            var totalFaculty = await _db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Account WHERE Role = 2");
 
-            // Count total offices
-            var totalOffices = await _context.Offices.CountAsync();
+            var dbFloors = await _db.QueryAsync<dynamic>("SELECT Id AS floorId, Number AS floorNumber FROM BuildingFloor");
+            var dbOffices = await _db.QueryAsync<dynamic>("SELECT Id, OfficeName AS name, BuildingFloorId FROM Office");
 
-            // Count OfficeBoys (Role = 1)
-            var totalOfficeBoys = await _context.Accounts
-                .CountAsync(a => a.Role == 1);
+            var floors = dbFloors.Select(f => new
+            {
+                floorId = f.floorId,
+                floorNumber = f.floorNumber,
+                offices = dbOffices.Where(o => o.BuildingFloorId == f.floorId)
+                                   .Select(o => new { id = o.Id, name = o.name })
+                                   .ToList()
+            }).ToList();
 
-            // Count Faculty (Role = 2)
-            var totalFaculty = await _context.Accounts
-                .CountAsync(a => a.Role == 2);
+            var officeboys = await _db.QueryAsync<dynamic>("SELECT Id AS id, Name AS name FROM Account WHERE Role = 1");
 
-            // Get full list of all floors with their offices
-            var floors = await _context.BuildingFloors
-                .Select(f => new
-                {
-                    floorId = f.Id,
-                    floorNumber = f.Number,
-                    offices = f.Offices.Select(o => new
-                    {
-                        id = o.Id,
-                        name = o.OfficeName
-                    }).ToList()
-                })
-                .ToListAsync();
+            var faculty = await _db.QueryAsync<dynamic>(@"
+                SELECT 
+                    a.Id AS id, 
+                    a.Name AS name, 
+                    o.OfficeName AS office, 
+                    bf.Number AS floor 
+                FROM Account a 
+                LEFT JOIN FacultyMemberOffice fmo ON a.Id = fmo.FacultyAccountId 
+                LEFT JOIN Office o ON fmo.OfficeId = o.Id 
+                LEFT JOIN BuildingFloor bf ON o.BuildingFloorId = bf.Id 
+                WHERE a.Role = 2");
 
-            // Get full list of all OfficeBoys
-            var officeboys = await _context.Accounts
-                .Where(a => a.Role == 1)
-                .Select(a => new
-                {
-                    id = a.Id,
-                    name = a.Name
-                })
-                .ToListAsync();
-
-            // Get full list of all Faculty with their office and floor
-            var faculty = await _context.Accounts
-                .Where(a => a.Role == 2)
-                .Select(a => new
-                {
-                    id = a.Id,
-                    name = a.Name,
-                    office = a.FacultyMemberOffices
-                                .Select(f => f.Office.OfficeName)
-                                .FirstOrDefault(),
-                    floor = a.FacultyMemberOffices
-                                .Select(f => f.Office.BuildingFloor.Number)
-                                .FirstOrDefault()
-                })
-                .ToListAsync();
-
-            // Return everything in one response
             return Ok(new
             {
-                totalFloors = totalFloors,
-                totalOffices = totalOffices,
-                totalOfficeBoys = totalOfficeBoys,
-                totalFaculty = totalFaculty,
-                floors = floors,
-                officeboys = officeboys,
-                faculty = faculty
+                totalFloors,
+                totalOffices,
+                totalOfficeBoys,
+                totalFaculty,
+                floors,
+                officeboys,
+                faculty
             });
         }
 
-        // -----------------------------------------------------------------------
         // GET api/supervisor/floors
-        //
-        // PURPOSE:
-        //   Returns all floors with offices inside each floor.
-        //   Called when Supervisor clicks on the Floors card.
-        //
-        // RESPONSE (200):
-        //   [
-        //     {
-        //       "floorId": 1,
-        //       "floorNumber": 1,
-        //       "offices": [
-        //         { "id": 1, "name": "CS Department Office" },
-        //         { "id": 2, "name": "Admin Office" }
-        //       ]
-        //     }
-        //   ]
-        // -----------------------------------------------------------------------
         [HttpGet("floors")]
         public async Task<IActionResult> GetFloors()
         {
-            var floors = await _context.BuildingFloors
-                .Select(f => new
-                {
-                    floorId = f.Id,
-                    floorNumber = f.Number,
-                //    offices = f.Offices.Select(o => new
-                //    {
-                //        id = o.Id,
-                //        name = o.OfficeName
-                //    }).ToList()
-                })
-                .ToListAsync();
-
+            var floors = await _db.QueryAsync<dynamic>("SELECT Id AS floorId, Number AS floorNumber FROM BuildingFloor");
             return Ok(floors);
         }
-        [HttpGet("FloorOffices")]
 
+        // GET api/supervisor/FloorOffices
+        [HttpGet("FloorOffices")]
         public async Task<IActionResult> GetFloorOffices(int id)
         {
-            var floorOffices = await _context.Offices
-                .Where(f => f.BuildingFloorId == id)
-                .Select(f => new
-                {
-                    OfficeName = f.OfficeName
-                })
-                .ToListAsync();
+            var floorOffices = await _db.QueryAsync<dynamic>(
+                "SELECT OfficeName FROM Office WHERE BuildingFloorId = @FloorId", new { FloorId = id });
 
             if (floorOffices == null || !floorOffices.Any())
                 return NotFound();
@@ -171,81 +84,44 @@ namespace OBManagementAPI.Controllers
             return Ok(floorOffices);
         }
 
-        // -----------------------------------------------------------------------
         // GET api/supervisor/officeboys
-        //
-        // PURPOSE:
-        //   Returns all OfficeBoys with their assigned floors.
-        //   Called when Supervisor clicks on the OfficeBoys card.
-        //
-        // RESPONSE (200):
-        //   [
-        //     {
-        //       "id":             1,
-        //       "name":           "Ali Raza",
-        //       "assignedFloors": [1, 2],
-        //       "assignedOffices": ["CS Department Office", "Admin Office"]
-        //     }
-        //   ]
-        // -----------------------------------------------------------------------
         [HttpGet("officeboys")]
         public async Task<IActionResult> GetOfficeBoys()
         {
-            var officeboys = await _context.Accounts
-                .Where(a => a.Role == 1)
-                .Select(a => new
-                {
-                    id = a.Id,
-                    name = a.Name,
-                    // List of floor numbers assigned to this officeboy
-                    assignedFloors = a.OfficeBoyAssignedFloors
-                        .Select(f => f.Floor.Number)
-                        .Distinct()
-                        .ToList(),
-                    // List of office names assigned to this officeboy
-                    //assignedOffices = a.OfficeBoyAssignedFloors
-                    //    .Select(f => f.Office.OfficeName)
-                    //    .ToList()
-                })
-                .ToListAsync();
+            var officeboys = await _db.QueryAsync<dynamic>("SELECT Id AS id, Name AS name FROM Account WHERE Role = 1");
+            var assignedFloors = await _db.QueryAsync<dynamic>(@"
+                SELECT obaf.OfficeBoyAccountId, bf.Number AS FloorNumber 
+                FROM OfficeBoyAssignedFloors obaf
+                JOIN BuildingFloor bf ON obaf.FloorId = bf.Id");
 
-            return Ok(officeboys);
+            var result = officeboys.Select(ob => new
+            {
+                id = ob.id,
+                name = ob.name,
+                assignedFloors = assignedFloors.Where(af => af.OfficeBoyAccountId == ob.id)
+                                               .Select(af => af.FloorNumber)
+                                               .Distinct()
+                                               .ToList()
+            }).ToList();
+
+            return Ok(result);
         }
 
-        // -----------------------------------------------------------------------
         // GET api/supervisor/faculty
-        //
-        // PURPOSE:
-        //   Returns all Faculty members with their office and floor info.
-        //   Called when Supervisor clicks on the Faculty card.
-        //
-        // RESPONSE (200):
-        //   [
-        //     {
-        //       "id":     5,
-        //       "name":   "Dr. Ayesha Noor",
-        //       "office": "CS Department Office",
-        //       "floor":  1
-        //     }
-        //   ]
-        // -----------------------------------------------------------------------
         [HttpGet("faculty")]
         public async Task<IActionResult> GetFaculty()
         {
-            var faculty = await _context.Accounts
-                .Where(a => a.Role == 2)
-                .Select(a => new
-                {
-                    id = a.Id,
-                    name = a.Name,
-                    office = a.FacultyMemberOffices
-                                .Select(f => f.Office.OfficeName)
-                                .FirstOrDefault(),
-                    floor = a.FacultyMemberOffices
-                                .Select(f => f.Office.BuildingFloor.Number)
-                                .FirstOrDefault()
-                })
-                .ToListAsync();
+            var faculty = await _db.QueryAsync<dynamic>(@"
+                SELECT 
+                    a.Id AS id, 
+                    a.Name AS name, 
+                    o.OfficeName AS office, 
+                    bf.Number AS floor 
+                FROM Account a 
+                LEFT JOIN FacultyMemberOffice fmo ON a.Id = fmo.FacultyAccountId 
+                LEFT JOIN Office o ON fmo.OfficeId = o.Id 
+                LEFT JOIN BuildingFloor bf ON o.BuildingFloorId = bf.Id 
+                WHERE a.Role = 2");
 
             return Ok(faculty);
         }

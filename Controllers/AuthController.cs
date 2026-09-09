@@ -1,5 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
+using System.Data;
+using Dapper;
 using OBManagementAPI.Models;
 
 namespace OBManagementAPI.Controllers
@@ -8,19 +9,19 @@ namespace OBManagementAPI.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly ObmanagementContext _context;
+        private readonly IDbConnection _db;
 
-        public AuthController(ObmanagementContext context)
+        public AuthController(IDbConnection db)
         {
-            _context = context;
+            _db = db;
         }
 
         // POST api/auth/login
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            var account = await _context.Accounts
-                .FirstOrDefaultAsync(a => a.Name == request.Name && a.Password == request.Password);
+            var query = "SELECT Id, Name, Role FROM Account WHERE Name = @Name AND Password = @Password";
+            var account = await _db.QueryFirstOrDefaultAsync<Account>(query, new { Name = request.Name, Password = request.Password });
 
             if (account == null)
                 return Unauthorized(new { message = "Invalid name or password" });

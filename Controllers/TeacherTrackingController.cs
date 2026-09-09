@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using OBManagementAPI.Models;
 using System;
+using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
+using OBManagementAPI.Models;
 
 namespace OBManagementAPI.Controllers
 {
@@ -11,38 +12,25 @@ namespace OBManagementAPI.Controllers
     [ApiController]
     public class TeacherTrackingController : ControllerBase
     {
-        private readonly ObmanagementContext _context;
+        private readonly IDbConnection _db;
 
-        public TeacherTrackingController(ObmanagementContext context)
+        public TeacherTrackingController(IDbConnection db)
         {
-            _context = context;
+            _db = db;
         }
 
         [HttpPost("set-task")]
         public async Task<IActionResult> SetTask([FromBody] SetTaskRequest request)
         {
             // Deactivate existing task of the same type (Arrival/Departure) for this faculty
-            var existingTasks = await _context.ArrivalDepartureTasks
-                .Where(t => t.FacultyAccountId == request.FacultyAccountId && t.TaskType == request.TaskType && t.IsActive)
-                .ToListAsync();
+            string updateSql = "UPDATE ArrivalDepartureTasks SET IsActive = 0 WHERE FacultyAccountId = @FacultyAccountId AND TaskType = @TaskType AND IsActive = 1";
+            await _db.ExecuteAsync(updateSql, new { FacultyAccountId = request.FacultyAccountId, TaskType = request.TaskType });
 
-            foreach (var t in existingTasks)
-            {
-                t.IsActive = false;
-            }
-
-            var task = new ArrivalDepartureTask
-            {
-                FacultyAccountId = request.FacultyAccountId,
-                TaskType = request.TaskType,
-                Description = request.Description,
-                Latitude = request.Latitude,
-                Longitude = request.Longitude,
-                IsActive = true
-            };
-
-            _context.ArrivalDepartureTasks.Add(task);
-            await _context.SaveChangesAsync();
+            // Insert new task
+            string insertSql = @"
+                INSERT INTO ArrivalDepartureTasks (FacultyAccountId, TaskType, Description, Latitude, Longitude, IsActive)
+                VALUES (@FacultyAccountId, @TaskType, @Description, @Latitude, @Longitude, 1)";
+            await _db.ExecuteAsync(insertSql, request);
 
             return Ok(new { message = "Task configuration saved successfully" });
         }
@@ -50,9 +38,8 @@ namespace OBManagementAPI.Controllers
         [HttpPost("update-location")]
         public async Task<IActionResult> UpdateLocation([FromBody] UpdateTeacherLocationRequest request)
         {
-            var activeTasks = await _context.ArrivalDepartureTasks
-                .Where(t => t.FacultyAccountId == request.FacultyAccountId && t.IsActive)
-                .ToListAsync();
+            string fetchTasksSql = "SELECT Id, FacultyAccountId, TaskType, Description, Latitude, Longitude, IsActive FROM ArrivalDepartureTasks WHERE FacultyAccountId = @FacultyAccountId AND IsActive = 1";
+            var activeTasks = (await _db.QueryAsync<dynamic>(fetchTasksSql, new { FacultyAccountId = request.FacultyAccountId })).ToList();
 
             if (!activeTasks.Any())
                 return Ok(new { message = "No active geofence tasks." });
@@ -66,39 +53,59 @@ namespace OBManagementAPI.Controllers
                 // If within 500 meters (0.5 km)
                 if (distance <= 0.5)
                 {
-                    var today = DateTime.Today;
-                    var alreadyTriggered = await _context.Tasks.AnyAsync(t => 
-                        t.FacultyAccountId == request.FacultyAccountId &&
-                        t.Description == geofence.Description &&
-                        t.TaskTime != null && t.TaskTime.Value.Date == today);
+                    string checkSql = @"
+                        SELECT COUNT(*) 
+                        FROM Task 
+                        WHERE FacultyAccountId = @FacultyAccountId 
+                          AND Description = @Description 
+                          AND CAST(TaskTime AS DATE) = CAST(GETDATE() AS DATE)";
 
-                    if (!alreadyTriggered)
+                    int count = await _db.ExecuteScalarAsync<int>(checkSql, new { FacultyAccountId = request.FacultyAccountId, Description = geofence.Description });
+
+                    if (count == 0)
                     {
-                        var facultyFloorId = await _context.FacultyMemberOffices
-                            .Where(f => f.FacultyAccountId == request.FacultyAccountId)
-                            .Select(f => f.Office.BuildingFloorId)
-                            .FirstOrDefaultAsync();
+                        string floorSql = @"
+                            SELECT TOP 1 o.BuildingFloorId 
+                            FROM FacultyMemberOffice fmo
+                            JOIN Office o ON fmo.OfficeId = o.Id
+                            WHERE fmo.FacultyAccountId = @FacultyAccountId";
 
-                        var availableOfficeBoyId = await _context.OfficeBoyAssignedFloors
-                            .Where(o => o.FloorId == facultyFloorId && o.Status == "Active")
-                            .Select(o => o.OfficeBoyAccountId)
-                            .FirstOrDefaultAsync();
+                        int facultyFloorId = await _db.ExecuteScalarAsync<int>(floorSql, new { FacultyAccountId = request.FacultyAccountId });
+
+                        string obSql = @"
+                            SELECT TOP 1 OfficeBoyAccountId 
+                            FROM OfficeBoyAssignedFloors 
+                            WHERE FloorId = @FloorId AND Status = 'Active'";
+
+                        int availableOfficeBoyId = await _db.ExecuteScalarAsync<int>(obSql, new { FloorId = facultyFloorId });
 
                         if (availableOfficeBoyId != 0)
                         {
-                            var newTask = new OBManagementAPI.Models.Task
-                            {
-                                FacultyAccountId = request.FacultyAccountId,
-                                OfficeBoyAccountId = availableOfficeBoyId,
-                                LocationId = 1, // Fallback location
-                                Description = geofence.Description,
-                                TaskTime = DateTime.Now,
-                                IsScheduled = false,
-                                Status = "Pending",
-                            };
+                            // Dynamically look up fallback Location ID (preferring "InBIIT" campus location)
+                            string locSql = "SELECT TOP 1 Id FROM Location WHERE Name = 'InBIIT'";
+                            int fallbackLocationId = await _db.ExecuteScalarAsync<int>(locSql);
 
-                            _context.Tasks.Add(newTask);
-                            taskTriggered = true;
+                            if (fallbackLocationId == 0)
+                            {
+                                locSql = "SELECT TOP 1 Id FROM Location";
+                                fallbackLocationId = await _db.ExecuteScalarAsync<int>(locSql);
+                            }
+
+                            if (fallbackLocationId != 0)
+                            {
+                                string insertTaskSql = @"
+                                    INSERT INTO Task (FacultyAccountId, OfficeBoyAccountId, LocationId, Description, TaskTime, IsScheduled, Status)
+                                    VALUES (@FacultyAccountId, @OfficeBoyAccountId, @LocationId, @Description, GETDATE(), 0, 'Pending')";
+
+                                await _db.ExecuteAsync(insertTaskSql, new {
+                                    FacultyAccountId = request.FacultyAccountId,
+                                    OfficeBoyAccountId = availableOfficeBoyId,
+                                    LocationId = fallbackLocationId,
+                                    Description = geofence.Description
+                                });
+
+                                taskTriggered = true;
+                            }
                         }
                     }
                 }
@@ -106,7 +113,6 @@ namespace OBManagementAPI.Controllers
 
             if (taskTriggered)
             {
-                await _context.SaveChangesAsync();
                 return Ok(new { message = "Location updated, task triggered!" });
             }
 
