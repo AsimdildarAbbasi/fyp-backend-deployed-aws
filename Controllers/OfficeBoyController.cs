@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using System.Data;
-using Dapper;
+using Microsoft.EntityFrameworkCore;
 using OBManagementAPI.Models;
 
 namespace OBManagementAPI.Controllers
@@ -9,49 +8,46 @@ namespace OBManagementAPI.Controllers
     [ApiController]
     public class OfficeBoyController : ControllerBase
     {
-        private readonly IDbConnection _db;
+        private readonly ObmanagementContext _context;
 
-        public OfficeBoyController(IDbConnection db)
+        public OfficeBoyController(ObmanagementContext context)
         {
-            _db = db;
+            _context = context;
         }
 
         // GET api/officeboy/{id}/tasks
         [HttpGet("{id}/tasks")]
         public async Task<IActionResult> GetTasksByOfficeBoy(int id)
         {
-            var officeBoy = await _db.QueryFirstOrDefaultAsync<Account>(
-                "SELECT Id FROM Account WHERE Id = @Id AND Role = 1", new { Id = id });
+            var officeBoy = await _context.Accounts
+                .FirstOrDefaultAsync(a => a.Id == id && a.Role == 1);
 
             if (officeBoy == null)
                 return NotFound(new { message = "OfficeBoy not found" });
 
-            string sql = @"
-                SELECT 
-                    t.Id AS taskId,
-                    t.Description AS description,
-                    l.Name AS location,
-                    l.Latitude AS latitude,
-                    l.Longitude AS longitude,
-                    f.Name AS assignedBy,
-                    t.Status AS status,
-                    t.TaskTime AS taskTime,
-                    t.Rating AS rating,
-                    t.Remarks AS remarks,
-                    t.CurrentLocationId AS currentLocationId,
-                    cl.Name AS currentLocationName,
-                    cl.Latitude AS currentLatitude,
-                    cl.Longitude AS currentLongitude,
-                    t.ScheduledAt AS scheduledAt,
-                    t.IsScheduled AS isScheduled
-                FROM Task t
-                LEFT JOIN Location l ON t.LocationId = l.Id
-                LEFT JOIN Account f ON t.FacultyAccountId = f.Id
-                LEFT JOIN Location cl ON t.CurrentLocationId = cl.Id
-                WHERE t.OfficeBoyAccountId = @OfficeBoyId
-                ORDER BY t.Id DESC";
-
-            var tasks = await _db.QueryAsync<dynamic>(sql, new { OfficeBoyId = id });
+            var tasks = await _context.Tasks
+                .Where(t => t.OfficeBoyAccountId == id)
+                .OrderByDescending(t => t.Id)
+                .Select(t => new
+                {
+                    taskId = t.Id,
+                    description = t.Description,
+                    location = t.Location != null ? t.Location.Name : null,
+                    latitude = t.Location != null ? t.Location.Latitude : null,
+                    longitude = t.Location != null ? t.Location.Longitude : null,
+                    assignedBy = t.FacultyAccount != null ? t.FacultyAccount.Name : null,
+                    status = t.Status,
+                    taskTime = t.TaskTime,
+                    rating = t.Rating,
+                    remarks = t.Remarks,
+                    currentLocationId = t.CurrentLocationId,
+                    currentLocationName = t.CurrentLocation != null ? t.CurrentLocation.Name : null,
+                    currentLatitude = t.CurrentLocation != null ? t.CurrentLocation.Latitude : null,
+                    currentLongitude = t.CurrentLocation != null ? t.CurrentLocation.Longitude : null,
+                    scheduledAt = t.ScheduledAt,
+                    isScheduled = t.IsScheduled
+                })
+                .ToListAsync();
 
             return Ok(tasks);
         }

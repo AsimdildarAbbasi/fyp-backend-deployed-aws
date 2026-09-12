@@ -1,21 +1,24 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 
 namespace OBManagementAPI.Models;
 
 public partial class FacultyTracking
 {
-    public int Id { get; set; }
+    public long Id { get; set; }
 
     public int FacultyAccountId { get; set; }
 
-    public decimal? Longitude { get; set; }
+    public double Latitude { get; set; }
 
-    public decimal? Latitude { get; set; }
+    public double Longitude { get; set; }
 
-    public DateOnly? Date { get; set; }
+    public DateTime RecordedAt { get; set; }
 
-    public TimeOnly? Time { get; set; }
+    public bool IsInsideGeofence { get; set; }
+
+    public int? GeofenceId { get; set; }
 
     public virtual Account FacultyAccount { get; set; } = null!;
+
+    public virtual Geofence? Geofence { get; set; }
 }

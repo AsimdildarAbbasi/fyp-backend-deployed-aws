@@ -33,9 +33,19 @@ public partial class ObmanagementContext : DbContext
 
     public virtual DbSet<ArrivalDepartureTask> ArrivalDepartureTasks { get; set; }
 
+    public virtual DbSet<Geofence> Geofences { get; set; }
+
+    public virtual DbSet<TaskCategory> TaskCategories { get; set; }
+
+    public virtual DbSet<FacultyGeofenceState> FacultyGeofenceStates { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=(local)\\SQLEXPRESS;Database=OBManagement;User Id=sa;Password=admin123;TrustServerCertificate=True");
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            optionsBuilder.UseSqlServer("Server=(local)\\SQLEXPRESS;Database=OBManagement;User Id=sa;Password=admin123;TrustServerCertificate=True");
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,17 +89,22 @@ public partial class ObmanagementContext : DbContext
 
         modelBuilder.Entity<FacultyTracking>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("PK__FacultyT__3214EC079197F328");
+            entity.HasKey(e => e.Id);
 
             entity.ToTable("FacultyTracking");
 
-            entity.Property(e => e.Latitude).HasColumnType("decimal(9, 6)");
-            entity.Property(e => e.Longitude).HasColumnType("decimal(9, 6)");
+            entity.Property(e => e.Latitude).HasColumnType("float");
+            entity.Property(e => e.Longitude).HasColumnType("float");
+            entity.Property(e => e.RecordedAt).HasColumnType("datetime");
 
             entity.HasOne(d => d.FacultyAccount).WithMany(p => p.FacultyTrackings)
                 .HasForeignKey(d => d.FacultyAccountId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__FacultyTr__Facul__619B8048");
+                .HasConstraintName("FK_FacultyTracking_Account");
+
+            entity.HasOne(d => d.Geofence).WithMany(p => p.FacultyTrackings)
+                .HasForeignKey(d => d.GeofenceId)
+                .HasConstraintName("FK_FacultyTracking_Geofence");
         });
 
         modelBuilder.Entity<Location>(entity =>
@@ -118,6 +133,8 @@ public partial class ObmanagementContext : DbContext
         modelBuilder.Entity<OfficeBoyAssignedFloor>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK__OfficeBo__3214EC072AB34896");
+
+            entity.ToTable("OfficeBoyAssignedFloors");
 
             entity.Property(e => e.Status).HasMaxLength(50);
 
@@ -151,6 +168,9 @@ public partial class ObmanagementContext : DbContext
             entity.Property(e => e.TaskTime)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
+            entity.Property(e => e.TriggerType)
+                .HasMaxLength(50)
+                .IsUnicode(false);
 
             entity.HasOne(d => d.FacultyAccount).WithMany(p => p.TaskFacultyAccounts)
                 .HasForeignKey(d => d.FacultyAccountId)
@@ -170,6 +190,61 @@ public partial class ObmanagementContext : DbContext
             entity.HasOne(d => d.CurrentLocation).WithMany()
                 .HasForeignKey(d => d.CurrentLocationId)
                 .HasConstraintName("FK__Task__CurrentLocation");
+
+            entity.HasOne(d => d.Geofence).WithMany(p => p.Tasks)
+                .HasForeignKey(d => d.GeofenceId)
+                .HasConstraintName("FK_Task_Geofence");
+
+            entity.HasOne(d => d.TaskCategory).WithMany(p => p.Tasks)
+                .HasForeignKey(d => d.TaskCategoryId)
+                .HasConstraintName("FK_Task_TaskCategory");
+        });
+
+        modelBuilder.Entity<ArrivalDepartureTask>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.ToTable("ArrivalDepartureTasks");
+        });
+
+        modelBuilder.Entity<Geofence>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.ToTable("Geofence");
+
+            entity.Property(e => e.Name).HasMaxLength(100);
+            entity.Property(e => e.CenterLatitude).HasColumnType("float");
+            entity.Property(e => e.CenterLongitude).HasColumnType("float");
+            entity.Property(e => e.RadiusMeters).HasColumnType("float");
+        });
+
+        modelBuilder.Entity<TaskCategory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.ToTable("TaskCategory");
+
+            entity.Property(e => e.Name).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<FacultyGeofenceState>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.ToTable("FacultyGeofenceState");
+
+            entity.Property(e => e.LastUpdatedAt).HasColumnType("datetime");
+
+            entity.HasOne(d => d.FacultyAccount).WithMany(p => p.FacultyGeofenceStates)
+                .HasForeignKey(d => d.FacultyAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_FacultyGeofenceState_Account");
+
+            entity.HasOne(d => d.Geofence).WithMany(p => p.FacultyGeofenceStates)
+                .HasForeignKey(d => d.GeofenceId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_FacultyGeofenceState_Geofence");
         });
 
         OnModelCreatingPartial(modelBuilder);

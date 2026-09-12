@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using System.Data;
-using Dapper;
+using Microsoft.EntityFrameworkCore;
 using OBManagementAPI.Models;
 
 namespace OBManagementAPI.Controllers
@@ -9,24 +8,29 @@ namespace OBManagementAPI.Controllers
     [ApiController]
     public class SupervisorController : ControllerBase
     {
-        private readonly IDbConnection _db;
+        private readonly ObmanagementContext _context;
 
-        public SupervisorController(IDbConnection db)
+        public SupervisorController(ObmanagementContext context)
         {
-            _db = db;
+            _context = context;
         }
 
         // GET api/supervisor/dashboard
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
-            var totalFloors = await _db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM BuildingFloor");
-            var totalOffices = await _db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Office");
-            var totalOfficeBoys = await _db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Account WHERE Role = 1");
-            var totalFaculty = await _db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Account WHERE Role = 2");
+            var totalFloors = await _context.BuildingFloors.CountAsync();
+            var totalOffices = await _context.Offices.CountAsync();
+            var totalOfficeBoys = await _context.Accounts.CountAsync(a => a.Role == 1);
+            var totalFaculty = await _context.Accounts.CountAsync(a => a.Role == 2);
 
-            var dbFloors = await _db.QueryAsync<dynamic>("SELECT Id AS floorId, Number AS floorNumber FROM BuildingFloor");
-            var dbOffices = await _db.QueryAsync<dynamic>("SELECT Id, OfficeName AS name, BuildingFloorId FROM Office");
+            var dbFloors = await _context.BuildingFloors
+                .Select(f => new { floorId = f.Id, floorNumber = f.Number })
+                .ToListAsync();
+
+            var dbOffices = await _context.Offices
+                .Select(o => new { o.Id, name = o.OfficeName, o.BuildingFloorId })
+                .ToListAsync();
 
             var floors = dbFloors.Select(f => new
             {
@@ -37,19 +41,23 @@ namespace OBManagementAPI.Controllers
                                    .ToList()
             }).ToList();
 
-            var officeboys = await _db.QueryAsync<dynamic>("SELECT Id AS id, Name AS name FROM Account WHERE Role = 1");
+            var officeboys = await _context.Accounts
+                .Where(a => a.Role == 1)
+                .Select(a => new { id = a.Id, name = a.Name })
+                .ToListAsync();
 
-            var faculty = await _db.QueryAsync<dynamic>(@"
-                SELECT 
-                    a.Id AS id, 
-                    a.Name AS name, 
-                    o.OfficeName AS office, 
-                    bf.Number AS floor 
-                FROM Account a 
-                LEFT JOIN FacultyMemberOffice fmo ON a.Id = fmo.FacultyAccountId 
-                LEFT JOIN Office o ON fmo.OfficeId = o.Id 
-                LEFT JOIN BuildingFloor bf ON o.BuildingFloorId = bf.Id 
-                WHERE a.Role = 2");
+            var faculty = await (from a in _context.Accounts
+                                 where a.Role == 2
+                                 from fmo in _context.FacultyMemberOffices.Where(f => f.FacultyAccountId == a.Id).DefaultIfEmpty()
+                                 from o in _context.Offices.Where(o => o.Id == fmo.OfficeId).DefaultIfEmpty()
+                                 from bf in _context.BuildingFloors.Where(b => b.Id == o.BuildingFloorId).DefaultIfEmpty()
+                                 select new
+                                 {
+                                     id = a.Id,
+                                     name = a.Name,
+                                     office = o != null ? o.OfficeName : null,
+                                     floor = bf != null ? bf.Number : null
+                                 }).ToListAsync();
 
             return Ok(new
             {
@@ -67,7 +75,9 @@ namespace OBManagementAPI.Controllers
         [HttpGet("floors")]
         public async Task<IActionResult> GetFloors()
         {
-            var floors = await _db.QueryAsync<dynamic>("SELECT Id AS floorId, Number AS floorNumber FROM BuildingFloor");
+            var floors = await _context.BuildingFloors
+                .Select(f => new { floorId = f.Id, floorNumber = f.Number })
+                .ToListAsync();
             return Ok(floors);
         }
 
@@ -75,8 +85,10 @@ namespace OBManagementAPI.Controllers
         [HttpGet("FloorOffices")]
         public async Task<IActionResult> GetFloorOffices(int id)
         {
-            var floorOffices = await _db.QueryAsync<dynamic>(
-                "SELECT OfficeName FROM Office WHERE BuildingFloorId = @FloorId", new { FloorId = id });
+            var floorOffices = await _context.Offices
+                .Where(o => o.BuildingFloorId == id)
+                .Select(o => new { officeName = o.OfficeName })
+                .ToListAsync();
 
             if (floorOffices == null || !floorOffices.Any())
                 return NotFound();
@@ -88,11 +100,18 @@ namespace OBManagementAPI.Controllers
         [HttpGet("officeboys")]
         public async Task<IActionResult> GetOfficeBoys()
         {
-            var officeboys = await _db.QueryAsync<dynamic>("SELECT Id AS id, Name AS name FROM Account WHERE Role = 1");
-            var assignedFloors = await _db.QueryAsync<dynamic>(@"
-                SELECT obaf.OfficeBoyAccountId, bf.Number AS FloorNumber 
-                FROM OfficeBoyAssignedFloors obaf
-                JOIN BuildingFloor bf ON obaf.FloorId = bf.Id");
+            var officeboys = await _context.Accounts
+                .Where(a => a.Role == 1)
+                .Select(a => new { id = a.Id, name = a.Name })
+                .ToListAsync();
+
+            var assignedFloors = await (from obaf in _context.OfficeBoyAssignedFloors
+                                        join bf in _context.BuildingFloors on obaf.FloorId equals bf.Id
+                                        select new
+                                        {
+                                            obaf.OfficeBoyAccountId,
+                                            FloorNumber = bf.Number
+                                        }).ToListAsync();
 
             var result = officeboys.Select(ob => new
             {
@@ -111,17 +130,18 @@ namespace OBManagementAPI.Controllers
         [HttpGet("faculty")]
         public async Task<IActionResult> GetFaculty()
         {
-            var faculty = await _db.QueryAsync<dynamic>(@"
-                SELECT 
-                    a.Id AS id, 
-                    a.Name AS name, 
-                    o.OfficeName AS office, 
-                    bf.Number AS floor 
-                FROM Account a 
-                LEFT JOIN FacultyMemberOffice fmo ON a.Id = fmo.FacultyAccountId 
-                LEFT JOIN Office o ON fmo.OfficeId = o.Id 
-                LEFT JOIN BuildingFloor bf ON o.BuildingFloorId = bf.Id 
-                WHERE a.Role = 2");
+            var faculty = await (from a in _context.Accounts
+                                 where a.Role == 2
+                                 from fmo in _context.FacultyMemberOffices.Where(f => f.FacultyAccountId == a.Id).DefaultIfEmpty()
+                                 from o in _context.Offices.Where(o => o.Id == fmo.OfficeId).DefaultIfEmpty()
+                                 from bf in _context.BuildingFloors.Where(b => b.Id == o.BuildingFloorId).DefaultIfEmpty()
+                                 select new
+                                 {
+                                     id = a.Id,
+                                     name = a.Name,
+                                     office = o != null ? o.OfficeName : null,
+                                     floor = bf != null ? bf.Number : null
+                                 }).ToListAsync();
 
             return Ok(faculty);
         }
