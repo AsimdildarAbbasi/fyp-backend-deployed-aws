@@ -1,5 +1,3 @@
-using System.Data;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using OBManagementAPI.Models;
 
@@ -7,10 +5,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<ObmanagementContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-// Register IDbConnection for Dapper
-builder.Services.AddTransient<IDbConnection>(sp =>
-    new SqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>

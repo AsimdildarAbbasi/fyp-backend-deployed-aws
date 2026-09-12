@@ -24,4 +24,6 @@ public partial class Account
     public virtual ICollection<Task> TaskOfficeBoyAccounts { get; set; } = new List<Task>();
 
     public virtual ICollection<ArrivalDepartureTask> ArrivalDepartureTasks { get; set; } = new List<ArrivalDepartureTask>();
+
+    public virtual ICollection<FacultyGeofenceState> FacultyGeofenceStates { get; set; } = new List<FacultyGeofenceState>();
 }
