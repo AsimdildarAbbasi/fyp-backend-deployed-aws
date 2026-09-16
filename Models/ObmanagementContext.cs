@@ -39,6 +39,8 @@ public partial class ObmanagementContext : DbContext
 
     public virtual DbSet<FacultyGeofenceState> FacultyGeofenceStates { get; set; }
 
+    public virtual DbSet<LeaveRequest> LeaveRequests { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
