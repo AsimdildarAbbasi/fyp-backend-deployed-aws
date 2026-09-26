@@ -15,18 +15,23 @@ namespace OBManagementAPI.Controllers
             _context = context;
         }
 
-        // GET api/officeboy/{id}/tasks
         [HttpGet("{id}/tasks")]
         public async Task<IActionResult> GetTasksByOfficeBoy(int id)
         {
-            var officeBoy = await _context.Accounts
-                .FirstOrDefaultAsync(a => a.Id == id && a.Role == 1);
-
-            if (officeBoy == null)
-                return NotFound(new { message = "OfficeBoy not found" });
+            var now = DateTime.Now;
 
             var tasks = await _context.Tasks
-                .Where(t => t.OfficeBoyAccountId == id)
+                .Where(t => t.OfficeBoyAccountId == id &&
+                    (
+                        // Simple immediate tasks: not scheduled, and not a geofence task at all
+                        (t.GeofenceTaskDetail == null && !t.IsScheduled)
+                        ||
+                        // Scheduled tasks: only show starting 1 hour before ScheduledAt
+                        (t.IsScheduled && t.ScheduledAt != null && t.ScheduledAt <= now.AddHours(1))
+                        ||
+                        // Geofence tasks: only show once triggered (Enter/Exit matched)
+                        (t.GeofenceTaskDetail != null && t.GeofenceTaskDetail.IsVisibleToOfficeBoy)
+                    ))
                 .OrderByDescending(t => t.Id)
                 .Select(t => new
                 {
@@ -45,7 +50,9 @@ namespace OBManagementAPI.Controllers
                     currentLatitude = t.CurrentLocation != null ? t.CurrentLocation.Latitude : null,
                     currentLongitude = t.CurrentLocation != null ? t.CurrentLocation.Longitude : null,
                     scheduledAt = t.ScheduledAt,
-                    isScheduled = t.IsScheduled
+                    isScheduled = t.IsScheduled,
+                    isGeofenceTask = t.GeofenceTaskDetail != null,
+                    triggerType = t.GeofenceTaskDetail != null ? t.GeofenceTaskDetail.TriggerType : null
                 })
                 .ToListAsync();
 
