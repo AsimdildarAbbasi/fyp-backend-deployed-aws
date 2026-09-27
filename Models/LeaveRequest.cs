@@ -17,8 +17,14 @@ namespace OBManagementAPI.Models
         public int? SupervisorAccountId { get; set; }
         public Account? SupervisorAccount { get; set; }
 
+        public int? SubstituteOfficeBoyAccountId { get; set; }
+        public Account? SubstituteOfficeBoyAccount { get; set; }
+        public int? OriginalAssignmentId { get; set; }
+        public int? SubstituteAssignmentId { get; set; }
+
         public string? SupervisorRemarks { get; set; }
         public DateTime RequestedAt { get; set; } = DateTime.Now;
         public DateTime? DecidedAt { get; set; }
+        public DateTime? ReturnedAt { get; set; }
     }
 }

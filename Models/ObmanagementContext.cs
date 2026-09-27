@@ -230,6 +230,13 @@ public partial class ObmanagementContext : DbContext
             entity.Property(e => e.Name).HasMaxLength(100);
         });
 
+        modelBuilder.Entity<LeaveRequest>(entity =>
+        {
+            entity.HasOne(d => d.SubstituteOfficeBoyAccount).WithMany()
+                .HasForeignKey(d => d.SubstituteOfficeBoyAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<FacultyGeofenceState>(entity =>
         {
             entity.HasKey(e => e.Id);

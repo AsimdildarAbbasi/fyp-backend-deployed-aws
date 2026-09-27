@@ -81,12 +81,29 @@ namespace OBManagementAPI.Controllers
                     reason = l.Reason,
                     status = l.Status,
                     supervisorRemarks = l.SupervisorRemarks,
+                    substituteOfficeBoyName = l.SubstituteOfficeBoyAccount != null
+                        ? l.SubstituteOfficeBoyAccount.Name
+                        : null,
                     requestedAt = l.RequestedAt,
                     decidedAt = l.DecidedAt
                 })
                 .ToListAsync();
 
             return Ok(leaves);
+        }
+
+        // GET api/leaverequest/free-officeboys
+        [HttpGet("free-officeboys")]
+        public async Task<IActionResult> GetFreeOfficeBoys()
+        {
+            var officeBoys = await _context.Accounts
+                .Where(a => a.Role == 1 && !_context.OfficeBoyAssignedFloors
+                    .Any(assignment => assignment.OfficeBoyAccountId == a.Id && assignment.Status == "Active"))
+                .OrderBy(a => a.Name)
+                .Select(a => new { id = a.Id, name = a.Name })
+                .ToListAsync();
+
+            return Ok(officeBoys);
         }
 
         // PUT api/leaverequest/{id}/decide
@@ -106,12 +123,72 @@ namespace OBManagementAPI.Controllers
             if (request.Approve != true && request.Approve != false)
                 return BadRequest(new { message = "Approve must be true or false" });
 
-            leave.Status = request.Approve ? "Approved" : "Rejected";
-            leave.SupervisorAccountId = request.SupervisorAccountId;
-            leave.SupervisorRemarks = request.Remarks;
-            leave.DecidedAt = DateTime.Now;
+            var originalAssignment = request.Approve
+                ? await _context.OfficeBoyAssignedFloors.FirstOrDefaultAsync(a =>
+                    a.OfficeBoyAccountId == leave.OfficeBoyAccountId && a.Status == "Active")
+                : null;
 
-            await _context.SaveChangesAsync();
+            if (request.Approve && originalAssignment != null)
+            {
+                if (!request.SubstituteOfficeBoyAccountId.HasValue)
+                    return BadRequest(new { message = "A substitute office boy is required for this assigned office boy" });
+
+                var substituteExists = await _context.Accounts
+                    .AnyAsync(a => a.Id == request.SubstituteOfficeBoyAccountId.Value && a.Role == 1);
+                if (!substituteExists)
+                    return BadRequest(new { message = "Substitute office boy not found" });
+
+                var substituteIsAssigned = await _context.OfficeBoyAssignedFloors
+                    .AnyAsync(a => a.OfficeBoyAccountId == request.SubstituteOfficeBoyAccountId.Value && a.Status == "Active");
+                if (substituteIsAssigned)
+                    return BadRequest(new { message = "Substitute office boy is not free" });
+            }
+
+            var transaction = originalAssignment != null
+                ? await _context.Database.BeginTransactionAsync()
+                : null;
+            try
+            {
+                if (originalAssignment != null)
+                {
+                    originalAssignment.Status = "OnLeave";
+
+                    var substituteAssignment = new OfficeBoyAssignedFloor
+                    {
+                        FloorId = originalAssignment.FloorId,
+                        OfficeId = originalAssignment.OfficeId,
+                        OfficeBoyAccountId = request.SubstituteOfficeBoyAccountId!.Value,
+                        Status = "Active"
+                    };
+
+                    _context.OfficeBoyAssignedFloors.Add(substituteAssignment);
+                    await _context.SaveChangesAsync();
+
+                    leave.SubstituteOfficeBoyAccountId = request.SubstituteOfficeBoyAccountId.Value;
+                    leave.OriginalAssignmentId = originalAssignment.Id;
+                    leave.SubstituteAssignmentId = substituteAssignment.Id;
+                }
+
+                leave.Status = request.Approve ? "Approved" : "Rejected";
+                leave.SupervisorAccountId = request.SupervisorAccountId;
+                leave.SupervisorRemarks = request.Remarks;
+                leave.DecidedAt = DateTime.Now;
+
+                await _context.SaveChangesAsync();
+                if (transaction != null)
+                    await transaction.CommitAsync();
+            }
+            catch
+            {
+                if (transaction != null)
+                    await transaction.RollbackAsync();
+                throw;
+            }
+            finally
+            {
+                if (transaction != null)
+                    await transaction.DisposeAsync();
+            }
 
             return Ok(new { message = $"Leave {leave.Status.ToLower()}", leaveId = leave.Id });
         }
@@ -130,5 +207,6 @@ namespace OBManagementAPI.Controllers
         public int SupervisorAccountId { get; set; }
         public bool Approve { get; set; }
         public string? Remarks { get; set; }
+        public int? SubstituteOfficeBoyAccountId { get; set; }
     }
 }
