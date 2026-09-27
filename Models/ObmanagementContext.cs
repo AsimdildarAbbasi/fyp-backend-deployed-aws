@@ -39,6 +39,7 @@ public partial class ObmanagementContext : DbContext
 
     public virtual DbSet<FacultyGeofenceState> FacultyGeofenceStates { get; set; }
 
+    public virtual DbSet<LeaveRequest> LeaveRequests { get; set; }
     public virtual DbSet<GeofenceTaskDetail> GeofenceTaskDetails { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -245,6 +246,13 @@ public partial class ObmanagementContext : DbContext
             entity.ToTable("TaskCategory");
 
             entity.Property(e => e.Name).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<LeaveRequest>(entity =>
+        {
+            entity.HasOne(d => d.SubstituteOfficeBoyAccount).WithMany()
+                .HasForeignKey(d => d.SubstituteOfficeBoyAccountId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<FacultyGeofenceState>(entity =>

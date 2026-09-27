@@ -5,6 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<ObmanagementContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddHostedService<OBManagementAPI.Services.LeaveReversionService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
