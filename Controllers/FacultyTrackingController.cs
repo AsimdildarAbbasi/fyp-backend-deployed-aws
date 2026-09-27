@@ -20,18 +20,16 @@ namespace OBManagementAPI.Controllers
         [HttpGet("has-pending/{facultyId}")]
         public async Task<IActionResult> HasPendingGeofenceTasks(int facultyId)
         {
-            var count = await _context.Tasks.CountAsync(t =>
-                t.FacultyAccountId == facultyId &&
-                t.GeofenceId != null &&
-                !t.IsVisibleToOfficeBoy &&
-                t.Status == "Pending");
+            var count = await _context.GeofenceTaskDetails
+                .CountAsync(g => g.FacultyAccountId == facultyId && !g.IsVisibleToOfficeBoy);
 
             return Ok(new { hasPending = count > 0, count });
         }
 
         // POST api/facultytracking/ping
         // PURPOSE: Faculty app calls this every ~15-30 seconds while a geofence task is pending.
-        // Detects Enter/Exit transitions and flips matching geofence Tasks to visible.
+        // Checks the faculty's CURRENT position against each active geofence and fires any
+        // matching pending task immediately. No location history is stored anywhere.
         [HttpPost("ping")]
         public async Task<IActionResult> Ping([FromBody] LocationPingRequest request)
         {
@@ -42,74 +40,40 @@ namespace OBManagementAPI.Controllers
                 .Where(g => g.IsActive)
                 .ToListAsync();
 
+            bool anyTaskTriggered = false;
+
             foreach (var geofence in geofences)
             {
                 double distanceMeters = HaversineDistanceMeters(
                     request.Latitude, request.Longitude, geofence.CenterLatitude, geofence.CenterLongitude);
 
                 bool isInsideNow = distanceMeters <= geofence.RadiusMeters;
+                string currentCondition = isInsideNow ? "Enter" : "Exit";
 
-                var existingState = await _context.FacultyGeofenceStates
-                    .FirstOrDefaultAsync(s => s.FacultyAccountId == request.FacultyAccountId && s.GeofenceId == geofence.Id);
+                var detailsToTrigger = await _context.GeofenceTaskDetails
+                    .Where(g => g.FacultyAccountId == request.FacultyAccountId &&
+                                g.GeofenceId == geofence.Id &&
+                                g.TriggerType == currentCondition &&
+                                !g.IsVisibleToOfficeBoy)
+                    .ToListAsync();
 
-                bool wasInsideBefore = existingState != null && existingState.IsCurrentlyInside;
-
-                // Log the raw ping regardless of whether a transition happened
-                _context.FacultyTrackings.Add(new FacultyTracking
+                foreach (var detail in detailsToTrigger)
                 {
-                    FacultyAccountId = request.FacultyAccountId,
-                    Latitude = request.Latitude,
-                    Longitude = request.Longitude,
-                    RecordedAt = DateTime.Now,
-                    IsInsideGeofence = isInsideNow,
-                    GeofenceId = geofence.Id
-                });
-
-                // Only act when the state actually flipped (this is the ENTER/EXIT event)
-                if (isInsideNow != wasInsideBefore)
-                {
-                    string triggerType = isInsideNow ? "Enter" : "Exit";
-
-                    var tasksToTrigger = await _context.Tasks
-                        .Where(t => t.FacultyAccountId == request.FacultyAccountId &&
-                                    t.GeofenceId == geofence.Id &&
-                                    t.TriggerType == triggerType &&
-                                    !t.IsVisibleToOfficeBoy &&
-                                    t.Status == "Pending")
-                        .ToListAsync();
-
-                    foreach (var task in tasksToTrigger)
-                    {
-                        task.IsVisibleToOfficeBoy = true;
-                        task.TriggeredAt = DateTime.Now;
-                    }
-                }
-
-                // Upsert the state row
-                if (existingState == null)
-                {
-                    _context.FacultyGeofenceStates.Add(new FacultyGeofenceState
-                    {
-                        FacultyAccountId = request.FacultyAccountId,
-                        GeofenceId = geofence.Id,
-                        IsCurrentlyInside = isInsideNow,
-                        LastUpdatedAt = DateTime.Now
-                    });
-                }
-                else
-                {
-                    existingState.IsCurrentlyInside = isInsideNow;
-                    existingState.LastUpdatedAt = DateTime.Now;
+                    detail.IsVisibleToOfficeBoy = true;
+                    detail.TriggeredAt = DateTime.Now;
+                    anyTaskTriggered = true;
                 }
             }
 
-            await _context.SaveChangesAsync();
+            if (anyTaskTriggered)
+            {
+                await _context.SaveChangesAsync();
+            }
 
-            return Ok(new { message = "Location processed" });
+            return Ok(new { message = "Location processed", taskTriggered = anyTaskTriggered });
         }
 
         // Standard haversine formula - distance between two lat/long points, in meters.
-        // Used instead of exact coordinate matching, since GPS pings never land exactly on a boundary point.
         private static double HaversineDistanceMeters(double lat1, double lon1, double lat2, double lon2)
         {
             const double earthRadiusMeters = 6371000;
@@ -132,14 +96,5 @@ namespace OBManagementAPI.Controllers
         public int FacultyAccountId { get; set; }
         public double Latitude { get; set; }
         public double Longitude { get; set; }
-    }
-
-    public class GeofenceRow
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = null!;
-        public double CenterLatitude { get; set; }
-        public double CenterLongitude { get; set; }
-        public double RadiusMeters { get; set; }
     }
 }

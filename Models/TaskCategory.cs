@@ -10,6 +10,5 @@ public partial class TaskCategory
     public string Name { get; set; } = null!;
 
     public bool IsActive { get; set; } = true;
-
-    public virtual ICollection<Task> Tasks { get; set; } = new List<Task>();
+public virtual ICollection<GeofenceTaskDetail> GeofenceTaskDetails { get; set; } = new List<GeofenceTaskDetail>();
 }

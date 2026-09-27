@@ -40,6 +40,7 @@ public partial class ObmanagementContext : DbContext
     public virtual DbSet<FacultyGeofenceState> FacultyGeofenceStates { get; set; }
 
     public virtual DbSet<LeaveRequest> LeaveRequests { get; set; }
+    public virtual DbSet<GeofenceTaskDetail> GeofenceTaskDetails { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -170,9 +171,6 @@ public partial class ObmanagementContext : DbContext
             entity.Property(e => e.TaskTime)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
-            entity.Property(e => e.TriggerType)
-                .HasMaxLength(50)
-                .IsUnicode(false);
 
             entity.HasOne(d => d.FacultyAccount).WithMany(p => p.TaskFacultyAccounts)
                 .HasForeignKey(d => d.FacultyAccountId)
@@ -192,14 +190,34 @@ public partial class ObmanagementContext : DbContext
             entity.HasOne(d => d.CurrentLocation).WithMany()
                 .HasForeignKey(d => d.CurrentLocationId)
                 .HasConstraintName("FK__Task__CurrentLocation");
+        });
 
-            entity.HasOne(d => d.Geofence).WithMany(p => p.Tasks)
+        modelBuilder.Entity<GeofenceTaskDetail>(entity =>
+        {
+            entity.HasKey(e => e.TaskId);
+
+            entity.ToTable("GeofenceTaskDetail");
+
+            entity.Property(e => e.TriggerType)
+                .HasMaxLength(10)
+                .IsUnicode(false);
+
+            entity.HasOne(d => d.Task).WithOne(t => t.GeofenceTaskDetail)
+                .HasForeignKey<GeofenceTaskDetail>(d => d.TaskId)
+                .HasConstraintName("FK_GeofenceTaskDetail_Task");
+
+            entity.HasOne(d => d.Faculty).WithMany()
+                .HasForeignKey(d => d.FacultyAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_GeofenceTaskDetail_Account");
+
+            entity.HasOne(d => d.Geofence).WithMany(p => p.GeofenceTaskDetails)
                 .HasForeignKey(d => d.GeofenceId)
-                .HasConstraintName("FK_Task_Geofence");
+                .HasConstraintName("FK_GeofenceTaskDetail_Geofence");
 
-            entity.HasOne(d => d.TaskCategory).WithMany(p => p.Tasks)
+            entity.HasOne(d => d.TaskCategory).WithMany(p => p.GeofenceTaskDetails)
                 .HasForeignKey(d => d.TaskCategoryId)
-                .HasConstraintName("FK_Task_TaskCategory");
+                .HasConstraintName("FK_GeofenceTaskDetail_TaskCategory");
         });
 
         modelBuilder.Entity<ArrivalDepartureTask>(entity =>

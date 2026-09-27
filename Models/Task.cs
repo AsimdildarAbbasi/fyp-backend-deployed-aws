@@ -31,16 +31,6 @@ public partial class Task
 
     public DateTime? LocationUpdatedAt { get; set; }
 
-    public int? GeofenceId { get; set; }
-
-    public string? TriggerType { get; set; }
-
-    public int? TaskCategoryId { get; set; }
-
-    public bool IsVisibleToOfficeBoy { get; set; } = false;
-
-    public DateTime? TriggeredAt { get; set; }
-
     public virtual Account FacultyAccount { get; set; } = null!;
 
     public virtual Location Location { get; set; } = null!;
@@ -49,7 +39,5 @@ public partial class Task
 
     public virtual Location? CurrentLocation { get; set; }
 
-    public virtual Geofence? Geofence { get; set; }
-
-    public virtual TaskCategory? TaskCategory { get; set; }
+    public virtual GeofenceTaskDetail? GeofenceTaskDetail { get; set; }
 }

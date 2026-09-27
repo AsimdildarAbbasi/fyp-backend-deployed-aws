@@ -17,8 +17,7 @@ public partial class Geofence
 
     public bool IsActive { get; set; } = true;
 
-    public virtual ICollection<Task> Tasks { get; set; } = new List<Task>();
-
+public  virtual ICollection<GeofenceTaskDetail> GeofenceTaskDetails { get; set; } = new List<GeofenceTaskDetail>(); 
     public virtual ICollection<FacultyGeofenceState> FacultyGeofenceStates { get; set; } = new List<FacultyGeofenceState>();
 
     public virtual ICollection<FacultyTracking> FacultyTrackings { get; set; } = new List<FacultyTracking>();
