@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OBManagementAPI.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace OBManagementAPI.Controllers
 {
@@ -213,7 +214,43 @@ namespace OBManagementAPI.Controllers
 
             return Ok(tasks);
         }
+//location work 
+public class CreateLocationDto
+{
+    [Required, MaxLength(200)]
+    public string Name { get; set; } = null!;
 
+    [Range(-90, 90)]
+    public double Latitude { get; set; }
+
+    [Range(-180, 180)]
+    public double Longitude { get; set; }
+
+}
+[HttpPost("Locations")]
+public async Task<IActionResult> CreateLocation([FromBody] CreateLocationDto dto)
+{
+    if (!ModelState.IsValid) return BadRequest(ModelState);
+
+    var location = new Location
+    {
+        Name = dto.Name.Trim(),
+        Latitude = dto.Latitude,
+        Longitude = dto.Longitude
+    };
+
+    _context.Locations.Add(location);
+    await _context.SaveChangesAsync();
+
+    // return in the same shape as GetLocations
+    return Ok(new
+    {
+        id = location.Id,
+        name = location.Name,
+        latitude = location.Latitude,
+        longitude = location.Longitude
+    });
+}
         // GET api/tasks/Locations
         [HttpGet("Locations")]
         public async Task<IActionResult> GetLocations()
