@@ -6,6 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<ObmanagementContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddHostedService<OBManagementAPI.Services.LeaveReversionService>();
+builder.Services.AddScoped<OBManagementAPI.Services.NotificationService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -30,6 +31,14 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+var webRootPath = app.Environment.WebRootPath
+    ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+var taskFilesPath = builder.Configuration["Uploads:TaskFilesPath"] ?? "uploads/tasks";
+Directory.CreateDirectory(Path.Combine(webRootPath, taskFilesPath.Replace('/', Path.DirectorySeparatorChar)));
+
+// Serve uploaded task attachments (wwwroot/uploads/...).
+app.UseStaticFiles();
 
 // Force Swagger to open regardless of Environment mode so we can test it
 app.UseSwagger();

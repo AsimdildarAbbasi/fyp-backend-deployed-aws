@@ -31,6 +31,17 @@ public partial class Task
 
     public DateTime? LocationUpdatedAt { get; set; }
 
+    public bool IsOutsideCampus { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
+
+    public int? UpdatedByAccountId { get; set; }
+
+    // Set when a task is temporarily moved to a substitute office boy during leave.
+    public int? OriginalOfficeBoyAccountId { get; set; }
+
+    public virtual ICollection<TaskAttachment> Attachments { get; set; } = new List<TaskAttachment>();
+
     public virtual Account FacultyAccount { get; set; } = null!;
 
     public virtual Location Location { get; set; } = null!;

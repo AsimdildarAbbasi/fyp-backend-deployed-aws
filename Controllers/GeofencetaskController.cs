@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OBManagementAPI.Models;
+using OBManagementAPI.Services;
 
 namespace OBManagementAPI.Controllers
 {
@@ -9,10 +10,14 @@ namespace OBManagementAPI.Controllers
     public class GeofenceTasksController : ControllerBase
     {
         private readonly ObmanagementContext _context;
+        private readonly NotificationService _notificationService;
 
-        public GeofenceTasksController(ObmanagementContext context)
+        public GeofenceTasksController(
+            ObmanagementContext context,
+            NotificationService notificationService)
         {
             _context = context;
+            _notificationService = notificationService;
         }
 
         // GET api/geofencetasks/geofences
@@ -117,6 +122,8 @@ namespace OBManagementAPI.Controllers
                 return BadRequest(new { message = "TriggerType must be 'Enter' or 'Exit'" });
 
             // Step 1: create the base Task row (same common fields as Now/Later tasks)
+            var isOutsideCampus = await _notificationService.IsOutsideCampusAsync(locationId);
+
             var task = new OBManagementAPI.Models.Task
             {
                 FacultyAccountId = request.FacultyAccountId,
@@ -125,6 +132,7 @@ namespace OBManagementAPI.Controllers
                 Description = request.Description,
                 TaskTime = DateTime.Now,
                 IsScheduled = false,
+                IsOutsideCampus = isOutsideCampus,
                 Status = "Pending"
             };
 
@@ -145,10 +153,14 @@ namespace OBManagementAPI.Controllers
             _context.GeofenceTaskDetails.Add(detail);
             await _context.SaveChangesAsync();
 
+            await _notificationService.NotifyFloorFacultyOfOutsideTaskAsync(
+                task, request.Description ?? string.Empty);
+
             return Ok(new
             {
                 message = "Geofence task created successfully",
-                taskId = task.Id
+                taskId = task.Id,
+                isOutsideCampus
             });
         }
     }

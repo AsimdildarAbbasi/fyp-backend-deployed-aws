@@ -40,6 +40,10 @@ namespace OBManagementAPI.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<string>("ProfileImageUrl")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<int>("Role")
                         .HasColumnType("int");
 
@@ -226,6 +230,82 @@ namespace OBManagementAPI.Migrations
                     b.ToTable("Geofence", (string)null);
                 });
 
+            modelBuilder.Entity("OBManagementAPI.Models.GeofenceTaskDetail", b =>
+                {
+                    b.Property<int>("TaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("FacultyAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("GeofenceId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsVisibleToOfficeBoy")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("TaskCategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TriggerType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<DateTime?>("TriggeredAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("TaskId");
+
+                    b.HasIndex("FacultyAccountId");
+
+                    b.HasIndex("GeofenceId");
+
+                    b.HasIndex("TaskCategoryId");
+
+                    b.ToTable("GeofenceTaskDetail", (string)null);
+                });
+
+            modelBuilder.Entity("OBManagementAPI.Models.LeavePolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("EffectiveFrom")
+                        .HasColumnType("datetime");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MonthlyLimit")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.Property<int>("YearlyLimit")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("LeavePolicy", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            EffectiveFrom = new DateTime(2020, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            IsActive = true,
+                            MonthlyLimit = 4,
+                            Role = 1,
+                            YearlyLimit = 25
+                        });
+                });
+
             modelBuilder.Entity("OBManagementAPI.Models.LeaveRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -311,6 +391,65 @@ namespace OBManagementAPI.Migrations
                     b.ToTable("Location", (string)null);
                 });
 
+            modelBuilder.Entity("OBManagementAPI.Models.Notification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime");
+
+                    b.Property<int?>("FloorId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("OfficeBoyAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RecipientAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TaskId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FloorId");
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("OfficeBoyAccountId");
+
+                    b.HasIndex("RecipientAccountId");
+
+                    b.HasIndex("TaskId");
+
+                    b.ToTable("Notification", (string)null);
+                });
+
             modelBuilder.Entity("OBManagementAPI.Models.Office", b =>
                 {
                     b.Property<int>("Id")
@@ -386,13 +525,12 @@ namespace OBManagementAPI.Migrations
                     b.Property<int>("FacultyAccountId")
                         .HasColumnType("int");
 
-                    b.Property<int?>("GeofenceId")
-                        .HasColumnType("int");
+                    b.Property<bool>("IsOutsideCampus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsScheduled")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsVisibleToOfficeBoy")
                         .HasColumnType("bit");
 
                     b.Property<int>("LocationId")
@@ -402,6 +540,9 @@ namespace OBManagementAPI.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<int>("OfficeBoyAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("OriginalOfficeBoyAccountId")
                         .HasColumnType("int");
 
                     b.Property<int?>("Rating")
@@ -421,21 +562,16 @@ namespace OBManagementAPI.Migrations
                         .HasColumnType("nvarchar(20)")
                         .HasDefaultValue("Pending");
 
-                    b.Property<int?>("TaskCategoryId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime?>("TaskTime")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime")
                         .HasDefaultValueSql("(getdate())");
 
-                    b.Property<string>("TriggerType")
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime");
 
-                    b.Property<DateTime?>("TriggeredAt")
-                        .HasColumnType("datetime2");
+                    b.Property<int?>("UpdatedByAccountId")
+                        .HasColumnType("int");
 
                     b.HasKey("Id")
                         .HasName("PK__Task__3214EC07C2FACE9A");
@@ -444,15 +580,50 @@ namespace OBManagementAPI.Migrations
 
                     b.HasIndex("FacultyAccountId");
 
-                    b.HasIndex("GeofenceId");
-
                     b.HasIndex("LocationId");
 
                     b.HasIndex("OfficeBoyAccountId");
 
-                    b.HasIndex("TaskCategoryId");
-
                     b.ToTable("Task", (string)null);
+                });
+
+            modelBuilder.Entity("OBManagementAPI.Models.TaskAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoredPath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("TaskId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskId");
+
+                    b.ToTable("TaskAttachment", (string)null);
                 });
 
             modelBuilder.Entity("OBManagementAPI.Models.TaskCategory", b =>
@@ -543,6 +714,42 @@ namespace OBManagementAPI.Migrations
                     b.Navigation("Geofence");
                 });
 
+            modelBuilder.Entity("OBManagementAPI.Models.GeofenceTaskDetail", b =>
+                {
+                    b.HasOne("OBManagementAPI.Models.Account", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyAccountId")
+                        .IsRequired()
+                        .HasConstraintName("FK_GeofenceTaskDetail_Account");
+
+                    b.HasOne("OBManagementAPI.Models.Geofence", "Geofence")
+                        .WithMany("GeofenceTaskDetails")
+                        .HasForeignKey("GeofenceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_GeofenceTaskDetail_Geofence");
+
+                    b.HasOne("OBManagementAPI.Models.TaskCategory", "TaskCategory")
+                        .WithMany("GeofenceTaskDetails")
+                        .HasForeignKey("TaskCategoryId")
+                        .HasConstraintName("FK_GeofenceTaskDetail_TaskCategory");
+
+                    b.HasOne("OBManagementAPI.Models.Task", "Task")
+                        .WithOne("GeofenceTaskDetail")
+                        .HasForeignKey("OBManagementAPI.Models.GeofenceTaskDetail", "TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_GeofenceTaskDetail_Task");
+
+                    b.Navigation("Faculty");
+
+                    b.Navigation("Geofence");
+
+                    b.Navigation("Task");
+
+                    b.Navigation("TaskCategory");
+                });
+
             modelBuilder.Entity("OBManagementAPI.Models.LeaveRequest", b =>
                 {
                     b.HasOne("OBManagementAPI.Models.Account", "OfficeBoyAccount")
@@ -565,6 +772,46 @@ namespace OBManagementAPI.Migrations
                     b.Navigation("SubstituteOfficeBoyAccount");
 
                     b.Navigation("SupervisorAccount");
+                });
+
+            modelBuilder.Entity("OBManagementAPI.Models.Notification", b =>
+                {
+                    b.HasOne("OBManagementAPI.Models.BuildingFloor", "Floor")
+                        .WithMany()
+                        .HasForeignKey("FloorId")
+                        .HasConstraintName("FK_Notification_Floor");
+
+                    b.HasOne("OBManagementAPI.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .HasConstraintName("FK_Notification_Location");
+
+                    b.HasOne("OBManagementAPI.Models.Account", "OfficeBoyAccount")
+                        .WithMany()
+                        .HasForeignKey("OfficeBoyAccountId")
+                        .HasConstraintName("FK_Notification_OfficeBoy");
+
+                    b.HasOne("OBManagementAPI.Models.Account", "RecipientAccount")
+                        .WithMany()
+                        .HasForeignKey("RecipientAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_Notification_Recipient");
+
+                    b.HasOne("OBManagementAPI.Models.Task", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .HasConstraintName("FK_Notification_Task");
+
+                    b.Navigation("Floor");
+
+                    b.Navigation("Location");
+
+                    b.Navigation("OfficeBoyAccount");
+
+                    b.Navigation("RecipientAccount");
+
+                    b.Navigation("Task");
                 });
 
             modelBuilder.Entity("OBManagementAPI.Models.Office", b =>
@@ -618,11 +865,6 @@ namespace OBManagementAPI.Migrations
                         .IsRequired()
                         .HasConstraintName("FK__Task__FacultyAcc__5CD6CB2B");
 
-                    b.HasOne("OBManagementAPI.Models.Geofence", "Geofence")
-                        .WithMany("Tasks")
-                        .HasForeignKey("GeofenceId")
-                        .HasConstraintName("FK_Task_Geofence");
-
                     b.HasOne("OBManagementAPI.Models.Location", "Location")
                         .WithMany("Tasks")
                         .HasForeignKey("LocationId")
@@ -635,22 +877,25 @@ namespace OBManagementAPI.Migrations
                         .IsRequired()
                         .HasConstraintName("FK__Task__OfficeBoyA__5DCAEF64");
 
-                    b.HasOne("OBManagementAPI.Models.TaskCategory", "TaskCategory")
-                        .WithMany("Tasks")
-                        .HasForeignKey("TaskCategoryId")
-                        .HasConstraintName("FK_Task_TaskCategory");
-
                     b.Navigation("CurrentLocation");
 
                     b.Navigation("FacultyAccount");
 
-                    b.Navigation("Geofence");
-
                     b.Navigation("Location");
 
                     b.Navigation("OfficeBoyAccount");
+                });
 
-                    b.Navigation("TaskCategory");
+            modelBuilder.Entity("OBManagementAPI.Models.TaskAttachment", b =>
+                {
+                    b.HasOne("OBManagementAPI.Models.Task", "Task")
+                        .WithMany("Attachments")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_TaskAttachment_Task");
+
+                    b.Navigation("Task");
                 });
 
             modelBuilder.Entity("OBManagementAPI.Models.Account", b =>
@@ -683,7 +928,7 @@ namespace OBManagementAPI.Migrations
 
                     b.Navigation("FacultyTrackings");
 
-                    b.Navigation("Tasks");
+                    b.Navigation("GeofenceTaskDetails");
                 });
 
             modelBuilder.Entity("OBManagementAPI.Models.Location", b =>
@@ -698,9 +943,16 @@ namespace OBManagementAPI.Migrations
                     b.Navigation("OfficeBoyAssignedFloors");
                 });
 
+            modelBuilder.Entity("OBManagementAPI.Models.Task", b =>
+                {
+                    b.Navigation("Attachments");
+
+                    b.Navigation("GeofenceTaskDetail");
+                });
+
             modelBuilder.Entity("OBManagementAPI.Models.TaskCategory", b =>
                 {
-                    b.Navigation("Tasks");
+                    b.Navigation("GeofenceTaskDetails");
                 });
 #pragma warning restore 612, 618
         }

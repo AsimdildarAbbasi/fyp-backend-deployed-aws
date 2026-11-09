@@ -41,6 +41,7 @@ namespace OBManagementAPI.Controllers
                     latitude = t.Location != null ? t.Location.Latitude : null,
                     longitude = t.Location != null ? t.Location.Longitude : null,
                     assignedBy = t.FacultyAccount != null ? t.FacultyAccount.Name : null,
+                    assignedByImageUrl = t.FacultyAccount != null ? t.FacultyAccount.ProfileImageUrl : null,
                     status = t.Status,
                     taskTime = t.TaskTime,
                     rating = t.Rating,
@@ -52,7 +53,17 @@ namespace OBManagementAPI.Controllers
                     scheduledAt = t.ScheduledAt,
                     isScheduled = t.IsScheduled,
                     isGeofenceTask = t.GeofenceTaskDetail != null,
-                    triggerType = t.GeofenceTaskDetail != null ? t.GeofenceTaskDetail.TriggerType : null
+                    triggerType = t.GeofenceTaskDetail != null ? t.GeofenceTaskDetail.TriggerType : null,
+                    isOutsideCampus = t.IsOutsideCampus,
+                    updatedAt = t.UpdatedAt,
+                    attachments = t.Attachments.Select(a => new
+                    {
+                        id = a.Id,
+                        fileName = a.FileName,
+                        path = a.StoredPath,
+                        contentType = a.ContentType,
+                        sizeBytes = a.SizeBytes
+                    }).ToList()
                 })
                 .ToListAsync();
 
