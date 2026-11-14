@@ -41,6 +41,9 @@ public partial class ObmanagementContext : DbContext
 
     public virtual DbSet<LeaveRequest> LeaveRequests { get; set; }
     public virtual DbSet<GeofenceTaskDetail> GeofenceTaskDetails { get; set; }
+    public virtual DbSet<TaskAttachment> TaskAttachments { get; set; }
+    public virtual DbSet<Notification> Notifications { get; set; }
+    public virtual DbSet<LeavePolicy> LeavePolicies { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -60,6 +63,7 @@ public partial class ObmanagementContext : DbContext
 
             entity.Property(e => e.Name).HasMaxLength(100);
             entity.Property(e => e.Password).HasMaxLength(255);
+            entity.Property(e => e.ProfileImageUrl).HasMaxLength(255);
         });
 
         modelBuilder.Entity<BuildingFloor>(entity =>
@@ -172,6 +176,9 @@ public partial class ObmanagementContext : DbContext
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
 
+            entity.Property(e => e.IsOutsideCampus).HasDefaultValue(false);
+            entity.Property(e => e.UpdatedAt).HasColumnType("datetime");
+
             entity.HasOne(d => d.FacultyAccount).WithMany(p => p.TaskFacultyAccounts)
                 .HasForeignKey(d => d.FacultyAccountId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
@@ -272,6 +279,80 @@ public partial class ObmanagementContext : DbContext
                 .HasForeignKey(d => d.GeofenceId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_FacultyGeofenceState_Geofence");
+        });
+
+        modelBuilder.Entity<TaskAttachment>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.ToTable("TaskAttachment");
+
+            entity.Property(e => e.FileName).HasMaxLength(255);
+            entity.Property(e => e.StoredPath).HasMaxLength(500);
+            entity.Property(e => e.ContentType).HasMaxLength(100);
+            entity.Property(e => e.UploadedAt).HasColumnType("datetime");
+
+            entity.HasOne(d => d.Task)
+                .WithMany(p => p.Attachments)
+                .HasForeignKey(d => d.TaskId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_TaskAttachment_Task");
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.ToTable("Notification");
+
+            entity.Property(e => e.Type).HasMaxLength(50);
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Message).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+
+            entity.HasOne(d => d.RecipientAccount).WithMany()
+                .HasForeignKey(d => d.RecipientAccountId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_Notification_Recipient");
+
+            entity.HasOne(d => d.OfficeBoyAccount).WithMany()
+                .HasForeignKey(d => d.OfficeBoyAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Notification_OfficeBoy");
+
+            entity.HasOne(d => d.Task).WithMany()
+                .HasForeignKey(d => d.TaskId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Notification_Task");
+
+            entity.HasOne(d => d.Floor).WithMany()
+                .HasForeignKey(d => d.FloorId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Notification_Floor");
+
+            entity.HasOne(d => d.Location).WithMany()
+                .HasForeignKey(d => d.LocationId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Notification_Location");
+        });
+
+        modelBuilder.Entity<LeavePolicy>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.ToTable("LeavePolicy");
+
+            entity.Property(e => e.EffectiveFrom).HasColumnType("datetime");
+
+            entity.HasData(new LeavePolicy
+            {
+                Id = 1,
+                Role = 1,
+                YearlyLimit = 25,
+                MonthlyLimit = 4,
+                EffectiveFrom = new DateTime(2020, 1, 1),
+                IsActive = true
+            });
         });
 
         OnModelCreatingPartial(modelBuilder);

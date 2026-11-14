@@ -50,12 +50,13 @@ namespace OBManagementAPI.Services
             using var scope = _scopeFactory.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ObmanagementContext>();
 
+            var today = DateTime.Today;
+
             var expiredLeaveIds = await context.LeaveRequests
                 .AsNoTracking()
                 .Where(leave => leave.Status == "Approved"
-                    && leave.EndDate < DateTime.Now
-                    && leave.ReturnedAt == null
-                    && leave.SubstituteAssignmentId != null)
+                    && leave.EndDate.Date < today
+                    && leave.ReturnedAt == null)
                 .Select(leave => leave.Id)
                 .ToListAsync(stoppingToken);
 
@@ -66,34 +67,49 @@ namespace OBManagementAPI.Services
                     var leave = await context.LeaveRequests.FirstOrDefaultAsync(request =>
                         request.Id == leaveId
                         && request.Status == "Approved"
-                        && request.EndDate < DateTime.Now
-                        && request.ReturnedAt == null
-                        && request.SubstituteAssignmentId != null,
+                        && request.EndDate.Date < today
+                        && request.ReturnedAt == null,
                         stoppingToken);
 
                     if (leave == null)
                         continue;
 
-                    if (!leave.OriginalAssignmentId.HasValue)
+                    if (leave.OriginalAssignmentId.HasValue)
                     {
-                        _logger.LogWarning("Expired leave request {LeaveId} has no original assignment", leave.Id);
-                        continue;
+                        var originalAssignment = await context.OfficeBoyAssignedFloors
+                            .FirstOrDefaultAsync(assignment => assignment.Id == leave.OriginalAssignmentId.Value, stoppingToken);
+
+                        if (originalAssignment == null)
+                        {
+                            _logger.LogWarning("Expired leave request {LeaveId} has no original assignment row", leave.Id);
+                            continue;
+                        }
+
+                        if (leave.SubstituteAssignmentId.HasValue)
+                        {
+                            var substituteAssignment = await context.OfficeBoyAssignedFloors
+                                .FirstOrDefaultAsync(assignment => assignment.Id == leave.SubstituteAssignmentId.Value, stoppingToken);
+
+                            if (substituteAssignment != null)
+                                context.OfficeBoyAssignedFloors.Remove(substituteAssignment);
+                        }
+
+                        originalAssignment.Status = "Active";
+
+                        // Move this office boy's temporarily transferred open tasks back.
+                        var transferredTasks = await context.Tasks
+                            .Where(task => task.OriginalOfficeBoyAccountId == leave.OfficeBoyAccountId
+                                && (task.Status == "Pending" || task.Status == "In Progress"))
+                            .ToListAsync(stoppingToken);
+
+                        foreach (var task in transferredTasks)
+                        {
+                            task.OfficeBoyAccountId = leave.OfficeBoyAccountId;
+                            task.OriginalOfficeBoyAccountId = null;
+                            task.UpdatedAt = DateTime.Now;
+                        }
                     }
 
-                    var originalAssignment = await context.OfficeBoyAssignedFloors
-                        .FirstOrDefaultAsync(assignment => assignment.Id == leave.OriginalAssignmentId.Value, stoppingToken);
-                    var substituteAssignment = await context.OfficeBoyAssignedFloors
-                        .FirstOrDefaultAsync(assignment => assignment.Id == leave.SubstituteAssignmentId!.Value, stoppingToken);
-
-                    if (originalAssignment == null)
-                    {
-                        _logger.LogWarning("Expired leave request {LeaveId} has no original assignment row", leave.Id);
-                        continue;
-                    }
-
-                    if (substituteAssignment != null)
-                        context.OfficeBoyAssignedFloors.Remove(substituteAssignment);
-                    originalAssignment.Status = "Active";
                     leave.ReturnedAt = DateTime.Now;
 
                     await context.SaveChangesAsync(stoppingToken);

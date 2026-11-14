@@ -13,6 +13,8 @@ public partial class Account
 
     public int Role { get; set; }
 
+    public string? ProfileImageUrl { get; set; }
+
     public virtual ICollection<FacultyMemberOffice> FacultyMemberOffices { get; set; } = new List<FacultyMemberOffice>();
 
     public virtual ICollection<FacultyTracking> FacultyTrackings { get; set; } = new List<FacultyTracking>();

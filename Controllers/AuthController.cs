@@ -21,7 +21,7 @@ namespace OBManagementAPI.Controllers
         {
             var account = await _context.Accounts
                 .Where(a => a.Name == request.Name && a.Password == request.Password)
-                .Select(a => new { a.Id, a.Name, a.Role })
+                .Select(a => new { a.Id, a.Name, a.Role, a.ProfileImageUrl })
                 .FirstOrDefaultAsync();
 
             if (account == null)
@@ -32,6 +32,7 @@ namespace OBManagementAPI.Controllers
                 id = account.Id,
                 name = account.Name,
                 role = account.Role,
+                profileImageUrl = account.ProfileImageUrl,
                 roleText = account.Role == 1 ? "OfficeBoy" :
                            account.Role == 2 ? "Faculty" : "Supervisor"
             });
